@@ -1,0 +1,26 @@
+name: dpr-fr
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - pandas
+  - pillow
+  - tqdm
+  - pyyaml
+  - scikit-learn
+  - opencv
+  - pytorch
+  - torchvision
+  - pytorch-cuda=12.1
+  - pip:
+      - facenet-pytorch
+      - diffusers>=0.30.0
+      - transformers>=4.43.0
+      - accelerate>=0.33.0
+      - safetensors>=0.4.3
+      - huggingface_hub>=0.24.0
+      - einops
