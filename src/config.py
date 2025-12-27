@@ -1,32 +1,26 @@
 from pathlib import Path
 
-ACTIVE_DATASET = "LFW_FOLDER"
-
 SEED = 0
 DEVICE = "cuda"
-BATCH_SIZE = 16
+BATCH_SIZE = 32  # pairs mode embeds many images; 32 is usually fine
 
+# Face encoder wrapper config (matches the wrapper we created)
 FACE_BACKBONE_NAME = "facenet_inceptionresnetv1_vggface2"
 RETURN_MODE = "embeddings"
 
-KNN_K = 1
-ACCEPT_THRESHOLD = 0.35
+BASE_DIR = Path(__file__).resolve().parents[1]  # project root
 
-MIN_IMAGES_PER_ID = 2
-ENROLL_PER_ID = 1
-QUERY_PER_ID = 1
+# LFW image root (folder containing person subfolders)
+LFW_IMAGES_ROOT = BASE_DIR / "data" / "lfw" / "lfw-deepfunneled" / "lfw-deepfunneled"
 
-MAX_IDS = None  # e.g., 50 for quick tests
+# LFW official protocol CSVs (put them in data/lfw/metadata/ for example)
+LFW_META_DIR = BASE_DIR / "data" / "lfw"
 
-BASE_DIR = Path(__file__).resolve().parents[1]  # project root (since config.py is in src/)
+LFW_MATCH_TRAIN = LFW_META_DIR / "matchpairsDevTrain.csv"
+LFW_MISMATCH_TRAIN = LFW_META_DIR / "mismatchpairsDevTrain.csv"
+LFW_MATCH_TEST = LFW_META_DIR / "matchpairsDevTest.csv"
+LFW_MISMATCH_TEST = LFW_META_DIR / "mismatchpairsDevTest.csv"
 
-DATASETS = {
-    "LFW_FOLDER": {
-        "type": "folder_identities",
-        "root": BASE_DIR / "data" / "lfw" / "lfw-deepfunneled" / "lfw-deepfunneled",
-    },
-}
-
-# Cache directory for enrollment templates (class map)
+# Optional cache for embeddings (recommended)
 CACHE_DIR = BASE_DIR / "data" / "cache"
-CACHE_TAG = "v1"  # bump if you change logic and want a fresh cache
+CACHE_TAG = "lfw_verif_v1"
