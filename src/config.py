@@ -2,18 +2,18 @@ from pathlib import Path
 
 SEED = 0
 DEVICE = "cuda"
-BATCH_SIZE = 32  # pairs mode embeds many images; 32 is usually fine
+BATCH_SIZE = 32  # pairs mode embeds many images
 
-# Face encoder wrapper config (matches the wrapper we created)
-FACE_BACKBONE_NAME = "facenet_inceptionresnetv1_vggface2"
+# Face encoder wrapper config
+FACE_BACKBONE_NAME = "facenet_inceptionresnetv1_vggface2"       # facenet_inceptionresnetv1_casia
 RETURN_MODE = "embeddings"
 
 BASE_DIR = Path(__file__).resolve().parents[1]  # project root
 
-# LFW image root (folder containing person subfolders)
+# LFW image root
 LFW_IMAGES_ROOT = BASE_DIR / "data" / "lfw" / "lfw-deepfunneled" / "lfw-deepfunneled"
 
-# LFW official protocol CSVs (put them in data/lfw/metadata/ for example)
+# LFW official protocol CSVs
 LFW_META_DIR = BASE_DIR / "data" / "lfw"
 
 LFW_MATCH_TRAIN = LFW_META_DIR / "matchpairsDevTrain.csv"
@@ -37,7 +37,7 @@ PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 
 # Your knobs
 PURIFIER_NUM_STEPS = 4
-PURIFIER_DENOISING_START = 0.6   # we will map this to img2img "strength" if needed
+PURIFIER_DENOISING_START = 0.6
 PURIFIER_NUM_VARIANTS = 1
 
 # Practical settings
