@@ -23,7 +23,7 @@ LFW_MISMATCH_TEST = LFW_META_DIR / "mismatchpairsDevTest.csv"
 
 # Optional cache for embeddings (recommended)
 CACHE_DIR = BASE_DIR / "data" / "cache"
-CACHE_TAG = "lfw_verif_v5"
+CACHE_TAG = "lfw_verif_v6"
 
 # ---------------------------
 # Purifier settings
@@ -51,7 +51,7 @@ PURIFIER_BATCH_SIZE = 1          # keep 1 to avoid VRAM issues; raise if you hav
 
 RUN_ATTACK_EVAL = True
 ATTACK_MAX_TEST_PAIRS = None
-ATTACK_EPS = 0.01
+ATTACK_EPS = 0.03
 ATTACK_ALPHA = 0.007
 ATTACK_STEPS = 10
 PURIFY_BOTH_IN_VERIF = False
