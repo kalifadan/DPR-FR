@@ -24,3 +24,22 @@ LFW_MISMATCH_TEST = LFW_META_DIR / "mismatchpairsDevTest.csv"
 # Optional cache for embeddings (recommended)
 CACHE_DIR = BASE_DIR / "data" / "cache"
 CACHE_TAG = "lfw_verif_v1"
+
+# ---------------------------
+# Purifier settings
+# ---------------------------
+# PURIFIER_NAME = "none"
+
+PURIFIER_NAME = "sdxl"
+
+# SDXL img2img model
+PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
+
+# Your knobs
+PURIFIER_NUM_STEPS = 4
+PURIFIER_DENOISING_START = 0.6   # we will map this to img2img "strength" if needed
+PURIFIER_NUM_VARIANTS = 1
+
+# Practical settings
+PURIFIER_RESOLUTION = 512        # 512 is much faster than 1024
+PURIFIER_BATCH_SIZE = 1          # keep 1 to avoid VRAM issues; raise if you have a lot of VRAM
