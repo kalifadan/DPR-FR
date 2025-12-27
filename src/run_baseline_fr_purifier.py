@@ -62,14 +62,14 @@ def load_pairs(match_csv: Path, mismatch_csv: Path) -> Tuple[List[Tuple[Path, Pa
 # ---------------------------
 # Embedding cache (image-level) — purifier-aware
 # ---------------------------
-def _cache_namespace(purifier_sig: str) -> str:
-    """
-    Unique namespace for caching. For now it's just 'none'.
-    Later, when you add SDXL, this prevents collisions between settings.
-    """
+def _safe_cache_ns(purifier_sig: str) -> str:
     if purifier_sig == "none":
         return "none"
-    return purifier_sig
+    return hashlib.sha1(purifier_sig.encode("utf-8")).hexdigest()[:16]
+
+
+def _cache_namespace(purifier_sig: str) -> str:
+    return _safe_cache_ns(purifier_sig)
 
 
 def _cache_key_for_image(path: Path, cache_ns: str) -> str:
@@ -207,6 +207,10 @@ def main():
     # Official pairs
     train_pairs, y_train = load_pairs(config.LFW_MATCH_TRAIN, config.LFW_MISMATCH_TRAIN)
     test_pairs, y_test = load_pairs(config.LFW_MATCH_TEST, config.LFW_MISMATCH_TEST)
+
+    # TODO: REMOVE BEFORE SUBMISSION, ONLY FOR QUICK SANITY
+    train_pairs, y_train = train_pairs[:config.MAX_TRAIN_PAIRS], y_train[:config.MAX_TRAIN_PAIRS]
+    test_pairs, y_test = test_pairs[:config.MAX_TEST_PAIRS], y_test[:config.MAX_TEST_PAIRS]
 
     print(f"Train pairs: {len(train_pairs)} | Test pairs: {len(test_pairs)}")
 

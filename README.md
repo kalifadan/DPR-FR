@@ -24,4 +24,6 @@ python3 src/run_baseline_fr.py
 ``
 
 ## TODO:
-1) Add a run_lfw_verification.py file that use the standard metadata files of the LFW and use the train-test splits to produce final metrics
+1) Hyperparams (sweep) over the diffusion params
+2) Cleaned + origianl photos comparison
+3) Add attack
