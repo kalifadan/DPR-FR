@@ -18,9 +18,9 @@ LFW: https://www.kaggle.com/datasets/jessicali9530/lfw-dataset?resource=download
 
 
 ## Baselines
-To run the FR baseline:
+To run the FR algorithm:
 ``
-python3 src/run_baseline_fr.py
+python3 src/src/run_fr_purifier.py
 ``
 
 ## TODO:

@@ -23,21 +23,21 @@ LFW_MISMATCH_TEST = LFW_META_DIR / "mismatchpairsDevTest.csv"
 
 # Optional cache for embeddings (recommended)
 CACHE_DIR = BASE_DIR / "data" / "cache"
-CACHE_TAG = "lfw_verif_v4"
+CACHE_TAG = "lfw_verif_v5"
 
 # ---------------------------
 # Purifier settings
 # ---------------------------
-# PURIFIER_NAME = "none"
 
-PURIFIER_NAME = "sdxl"
+PURIFIER_NAME = "none"
+# PURIFIER_NAME = "sdxl"
 
 # SDXL img2img model
-PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"      # TODO: USE THE BETTER MODEL
+PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 # PURIFIER_MODEL_ID = "stabilityai/sdxl-turbo"
 
 # Your knobs
-PURIFIER_NUM_STEPS = 2      # TODO: 4
+PURIFIER_NUM_STEPS = 4
 PURIFIER_DENOISING_START = 0.6
 PURIFIER_NUM_VARIANTS = 1
 
@@ -45,6 +45,16 @@ PURIFIER_NUM_VARIANTS = 1
 PURIFIER_RESOLUTION = 512        # 512 is much faster than 1024
 PURIFIER_BATCH_SIZE = 1          # keep 1 to avoid VRAM issues; raise if you have a lot of VRAM
 
-# TODO: REMOVE BEFORE SUBMIT - ONLY FOR QUICK SANITY (ALSO FROM THE CODE)
-MAX_TRAIN_PAIRS = 20
-MAX_TEST_PAIRS = 20
+# ---------------------------
+# Attack settings
+# ---------------------------
+
+RUN_ATTACK_EVAL = True
+ATTACK_MAX_TEST_PAIRS = None
+ATTACK_EPS = 0.01
+ATTACK_ALPHA = 0.007
+ATTACK_STEPS = 10
+PURIFY_BOTH_IN_VERIF = False
+
+# MAX_TRAIN_PAIRS = 20
+# MAX_TEST_PAIRS = 20

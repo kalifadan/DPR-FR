@@ -100,3 +100,22 @@ class FacialRecognitionWrapper(nn.Module):
         emb = self.model(x)  # (B, D)
         emb = F.normalize(emb, dim=-1)
         return emb
+
+    def preprocess_pil(self, images: List[Image.Image]) -> torch.Tensor:
+        """
+        Same preprocessing as forward(), but returns a tensor (B,3,H,W) in [-1,1].
+        No gradients needed here; it’s just a deterministic transform from PIL.
+        """
+        return self._preprocess(images)
+
+    def encode_tensor(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Encode a preprocessed tensor x in [-1,1] with gradients enabled.
+        Input:  (B,3,H,W) float tensor in [-1,1]
+        Output: (B,D) normalized embeddings
+        """
+        x = x.to(self.device_str)
+        emb = self.model(x)             # NO torch.no_grad here
+        emb = F.normalize(emb, dim=-1)
+        return emb
+
