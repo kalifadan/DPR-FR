@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]  # project root (since config.py 
 DATASETS = {
     "LFW_FOLDER": {
         "type": "folder_identities",
-        "root": BASE_DIR / "data" / "lfw" / "lfw-deepfunneled",
+        "root": BASE_DIR / "data" / "lfw" / "lfw-deepfunneled" / "lfw-deepfunneled",
     },
 }
 
