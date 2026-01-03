@@ -29,8 +29,8 @@ CACHE_TAG = "lfw_verif_v6"
 # Purifier settings
 # ---------------------------
 
-PURIFIER_NAME = "none"
-# PURIFIER_NAME = "sdxl"
+# PURIFIER_NAME = "none"
+PURIFIER_NAME = "sdxl"
 
 # SDXL img2img model
 PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
@@ -42,8 +42,8 @@ PURIFIER_DENOISING_START = 0.6
 PURIFIER_NUM_VARIANTS = 1
 
 # Practical settings
-PURIFIER_RESOLUTION = 512        # 512 is much faster than 1024
-PURIFIER_BATCH_SIZE = 1          # keep 1 to avoid VRAM issues; raise if you have a lot of VRAM
+PURIFIER_RESOLUTION = 512
+PURIFIER_BATCH_SIZE = 1
 
 # ---------------------------
 # Attack settings

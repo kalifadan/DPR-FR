@@ -320,25 +320,55 @@ def main():
             test_pairs_sub = test_pairs
             y_test_sub = y_test
 
-        # Build both modes
+        # ----------------------------
+        # Baseline vs defended settings
+        # ----------------------------
         purifier_none = get_purifier("none", num_steps=0, denoising_start=0.0)
-        purifier_def = get_purifier(
-            name=config.PURIFIER_NAME,
-            num_steps=config.PURIFIER_NUM_STEPS,
-            denoising_start=config.PURIFIER_DENOISING_START,
-            num_variants=getattr(config, "PURIFIER_NUM_VARIANTS", 1),
-        )
 
-        # --- Calibrate thresholds separately on clean DevTrain ---
+        # Defended purifier policy:
+        #   - If PURIFIER_NAME == "none": we still report a defended baseline by diffusing TEST images only.
+        #     (baseline threshold is calibrated on clean DevTrain; thr_def = thr_base)
+        #   - If PURIFIER_NAME == "sdxl": diffuse both DevTrain and DevTest; calibrate thr_def on diffused DevTrain.
+        #   - Else: use the specified purifier for both DevTrain and DevTest (current behavior).
+        pur_name = getattr(config, "PURIFIER_NAME", "none")
+        if pur_name == "none":
+            purifier_def = get_purifier(
+                name="sdxl",
+                num_steps=getattr(config, "PURIFIER_NUM_STEPS", 4),
+                denoising_start=getattr(config, "PURIFIER_DENOISING_START", 0.6),
+                num_variants=getattr(config, "PURIFIER_NUM_VARIANTS", 1),
+            )
+            defend_mode = "sdxl_on_test_only"
+        else:
+            purifier_def = get_purifier(
+                name=pur_name,
+                num_steps=getattr(config, "PURIFIER_NUM_STEPS", 4),
+                denoising_start=getattr(config, "PURIFIER_DENOISING_START", 0.6),
+                num_variants=getattr(config, "PURIFIER_NUM_VARIANTS", 1),
+            )
+            defend_mode = f"{pur_name}_train_and_test"
+
+        # For diffusion-based evaluation (sdxl), we should purify BOTH sides in verification
+        # to match the way we build caches / thresholds (purifier applied per-image).
+        purify_both_def = bool(getattr(config, "PURIFY_BOTH_IN_VERIF", False) or pur_name in ["sdxl", "none"])
+
+        # --- Calibrate baseline threshold on clean DevTrain ---
         emb_cache_base = embed_unique_images(fr, all_paths, purifier_none)
         train_scores_base = pair_cosine_scores(train_pairs, emb_cache_base, purifier_none.signature)
         thr_base = pick_threshold_on_train(train_scores_base, y_train)
 
-        emb_cache_def = embed_unique_images(fr, all_paths, purifier_def)
-        train_scores_def = pair_cosine_scores(train_pairs, emb_cache_def, purifier_def.signature)
-        thr_def = pick_threshold_on_train(train_scores_def, y_train)
+        # --- Calibrate defended threshold (only if purifier is part of TRAIN) ---
+        if pur_name == "none":
+            # defended baseline = apply diffusion at test time only; keep baseline threshold
+            thr_def = thr_base
+            print(f"[AttackEval] Defended mode: {defend_mode} | thr_def := thr_base (no defended-threshold calibration)")
+        else:
+            emb_cache_def = embed_unique_images(fr, all_paths, purifier_def)
+            train_scores_def = pair_cosine_scores(train_pairs, emb_cache_def, purifier_def.signature)
+            thr_def = pick_threshold_on_train(train_scores_def, y_train)
+            print(f"[AttackEval] Defended mode: {defend_mode} | thr_def calibrated on defended DevTrain")
 
-        print(f"[AttackEval] thr_base={thr_base:.6f} | thr_def={thr_def:.6f}")
+        print(f"[AttackEval] thr_base={thr_base:.6f} | thr_def={thr_def:.6f} | purify_both_def={purify_both_def}")
 
         fooled_baseline = 0
         fooled_defended = 0
@@ -363,7 +393,7 @@ def main():
             correct_clean_base += int(pred_clean_base == y)
 
             # -------- clean (defended) --------
-            if getattr(config, "PURIFY_BOTH_IN_VERIF", False):
+            if purify_both_def:
                 im1_def, im2_def = purifier_def([im1, im2])
             else:
                 im1_def = purifier_def([im1])[0]
@@ -376,7 +406,7 @@ def main():
             pred_clean_def = int(sim_clean_def >= thr_def)
             correct_clean_def += int(pred_clean_def == y)
 
-            # -------- PGD attack on x1 --------
+            # -------- PGD attack on x1 ----
             x1_adv = pgd_attack_pair(
                 fr=fr,
                 x1=x1,
@@ -396,7 +426,7 @@ def main():
 
             # attacked defended
             adv_pil = tensor_to_pil(x1_adv[0])
-            if getattr(config, "PURIFY_BOTH_IN_VERIF", False):
+            if purify_both_def:
                 adv_pil_def, im2_def2 = purifier_def([adv_pil, im2])
             else:
                 adv_pil_def = purifier_def([adv_pil])[0]
@@ -409,7 +439,6 @@ def main():
             pred_adv_def = int(sim_def >= thr_def)
             fooled_defended += int(pred_adv_def != y)
 
-        # ASR (untargeted) == fooled rate
         asr_base = fooled_baseline / total
         asr_def = fooled_defended / total
 
