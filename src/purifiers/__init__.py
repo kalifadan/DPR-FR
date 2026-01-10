@@ -29,22 +29,21 @@ class NoOpPurifier(BasePurifier):
         return "none"
 
 
-def get_purifier(name: str, num_steps: int = 4, denoising_start: float = 0.6, num_variants: int = 1):
+def get_purifier(name: str, model_id: str, num_steps: int = 4, denoising_start: float = 0.6, num_variants: int = 1, device: str = "cuda"):
     name = (name or "none").lower()
     if name in {"none", "noop"}:
         return NoOpPurifier()
 
     if name == "sdxl":
         from .sdxl import SDXLPurifier
-        import config as _cfg
         return SDXLPurifier(
-            model_id=_cfg.PURIFIER_MODEL_ID,
-            num_steps=_cfg.PURIFIER_NUM_STEPS,
-            denoising_start=_cfg.PURIFIER_DENOISING_START,
-            resolution=getattr(_cfg, "PURIFIER_RESOLUTION", 512),
-            batch_size=getattr(_cfg, "PURIFIER_BATCH_SIZE", 1),
-            device=getattr(_cfg, "DEVICE", "cuda"),
-            seed=getattr(_cfg, "SEED", 0),
+            model_id=model_id,
+            num_steps=num_steps,
+            denoising_start=denoising_start,
+            resolution=512,
+            batch_size=1,
+            device=device,
+            seed=0,
         )
 
     raise ValueError(f"Unknown PURIFIER_NAME={name}. Supported: 'none', 'sdxl'.")

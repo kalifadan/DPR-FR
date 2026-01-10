@@ -10,13 +10,73 @@ import torch.nn.functional as F
 from PIL import Image
 from tqdm import tqdm
 
-# Use FR_CONFIG env var to point to the config module name (without .py) if desired
-# Example: FR_CONFIG=config_id_final python run_fr_identification_attack.py
-_cfg_name = os.environ.get("FR_CONFIG", "config_identification")
+_cfg_name = "config_identification"
 config = __import__(_cfg_name)
 
 from face_recognition.fr_wrapper import FacialRecognitionWrapper
 from purifiers import get_purifier
+
+from PIL import Image
+import numpy as np
+import torch
+
+
+def _to_pil_rgb(x) -> Image.Image:
+    """Convert PIL / torch / numpy into a PIL RGB image."""
+    if isinstance(x, Image.Image):
+        return x.convert("RGB")
+
+    if torch.is_tensor(x):
+        t = x.detach().cpu()
+        # Accept (B,C,H,W) or (C,H,W)
+        if t.ndim == 4:
+            t = t[0]
+        if t.ndim != 3:
+            raise TypeError(f"Unexpected tensor shape for image: {tuple(t.shape)}")
+        # Heuristic: if in [-1,1] map to [0,1]
+        if t.min().item() < -0.1:
+            t = (t + 1.0) / 2.0
+        t = t.clamp(0, 1)
+        t = (t * 255.0).byte()
+        t = t.permute(1, 2, 0).contiguous().numpy()
+        return Image.fromarray(t, mode="RGB")
+
+    if isinstance(x, np.ndarray):
+        a = x
+        if a.ndim == 4:
+            a = a[0]
+        if a.ndim == 3 and a.shape[0] in (1, 3):  # CHW -> HWC
+            a = np.transpose(a, (1, 2, 0))
+        if a.dtype != np.uint8:
+            # Heuristic: assume [0,1]
+            a = np.clip(a, 0, 1)
+            a = (a * 255.0).astype(np.uint8)
+        return Image.fromarray(a, mode="RGB")
+
+    raise TypeError(f"Unsupported image type from purifier: {type(x)}")
+
+
+def purify_one(purifier, pil: Image.Image, variant_idx: int = 0) -> Image.Image:
+    """
+    Call purifier and robustly extract a single PIL image (RGB).
+    Handles: list, nested list (batch x variants), dict{'images':...}, torch tensors, numpy arrays.
+    """
+    out = purifier([pil])  # your purifier API
+
+    if isinstance(out, dict) and "images" in out:
+        out = out["images"]
+
+    # If batch wrapper returns [variants] for batch=1 or [[...]] for batch=1
+    if isinstance(out, (list, tuple)) and len(out) == 1 and isinstance(out[0], (list, tuple)):
+        out = out[0]
+
+    if isinstance(out, (list, tuple)):
+        if len(out) == 0:
+            raise RuntimeError("Purifier returned an empty list.")
+        idx = int(min(max(variant_idx, 0), len(out) - 1))
+        out = out[idx]
+
+    return _to_pil_rgb(out)
 
 
 def set_seed(seed: int) -> None:
@@ -74,7 +134,11 @@ def save_cache(cache_fp: Path, cache: Dict[str, torch.Tensor]) -> None:
 
 
 def cache_key(img_path: Path, variant_idx: int = 0) -> str:
-    return f"{str(img_path)}::v{int(variant_idx)}"
+    try:
+        mtime = img_path.stat().st_mtime_ns
+    except OSError:
+        mtime = 0
+    return f"{str(img_path)}::m{mtime}::v{int(variant_idx)}"
 
 
 @torch.no_grad()
@@ -105,9 +169,14 @@ def embed_image(
 
     pil = Image.open(img_path).convert("RGB")
     if purifier is not None:
-        pil = purifier([pil])[0]
+        pil = purify_one(purifier, pil, variant_idx=variant_idx)
 
     emb = encode_pil(fr, pil)
+
+    if not torch.isfinite(emb).all():
+        raise RuntimeError(
+            f"Non-finite embedding for {img_path} (variant={variant_idx}, purifier={'on' if purifier is not None else 'off'})")
+
     cache[k] = emb
     return emb
 
@@ -329,9 +398,11 @@ def pgd_attack_unknown_probe(
 def get_sdxl_purifier():
     return get_purifier(
         name="sdxl",
+        model_id=str(getattr(config, "PURIFIER_MODEL_ID")),
         num_steps=int(getattr(config, "PURIFIER_NUM_STEPS", 4)),
         denoising_start=float(getattr(config, "PURIFIER_DENOISING_START", 0.25)),
         num_variants=int(getattr(config, "PURIFIER_NUM_VARIANTS", 1)),
+        device=str(getattr(config, "DEVICE", "cuda")),
     )
 
 
@@ -367,10 +438,46 @@ def eval_one_trial(
     # Purifier + caches
     purifier_sdxl = get_sdxl_purifier()
 
+    # --- Sanity check: purifier must depend on input ---
+    try:
+        test_paths = []
+        for nm in known_names_all[:200]:
+            p = lfw_image_path(Path(config.LFW_IMAGES_ROOT), nm, 1)
+            if p.exists():
+                test_paths.append(p)
+            if len(test_paths) >= 2:
+                break
+
+        if len(test_paths) == 2:
+            a = Image.open(test_paths[0]).convert("RGB")
+            b = Image.open(test_paths[1]).convert("RGB")
+            a2 = purify_one(purifier_sdxl, a, 0)
+            b2 = purify_one(purifier_sdxl, b, 0)
+
+            # simple pixel-level difference
+            da = np.asarray(a2, dtype=np.int16)
+            db = np.asarray(b2, dtype=np.int16)
+            mad = float(np.mean(np.abs(da - db)))
+            if mad < 1.0:
+                print(f"[WARN] Purifier output nearly identical for two different inputs (MAD={mad:.3f}). "
+                      f"This suggests the purifier is not conditioning on the input image.")
+    except Exception as e:
+        print(f"[WARN] Purifier sanity check failed: {e}")
+
     cache_clean_fp = cache_path(config.CACHE_TAG, config.FACE_BACKBONE_NAME, "none")
     cache_clean = load_cache(cache_clean_fp)
 
-    cache_ns_sdxl = _sha1(getattr(purifier_sdxl, "signature", "sdxl"))
+    sdxl_sig = getattr(purifier_sdxl, "signature", "sdxl")
+    sdxl_sig_full = "|".join([
+        sdxl_sig,
+        f"model_id={getattr(config, 'PURIFIER_MODEL_ID', None)}",
+        f"steps={getattr(config, 'PURIFIER_NUM_STEPS', None)}",
+        f"denoise_start={getattr(config, 'PURIFIER_DENOISING_START', None)}",
+        f"variants={getattr(config, 'PURIFIER_NUM_VARIANTS', None)}",
+        f"res={getattr(config, 'PURIFIER_RESOLUTION', None)}",
+    ])
+    cache_ns_sdxl = _sha1(sdxl_sig_full)
+
     cache_sdxl_fp = cache_path(config.CACHE_TAG, config.FACE_BACKBONE_NAME, cache_ns_sdxl)
     cache_sdxl = load_cache(cache_sdxl_fp)
 
@@ -417,6 +524,10 @@ def eval_one_trial(
                 for v in range(kk):
                     embs.append(embed_image(fr, p, purifier=purifier_sdxl, cache=cache_sdxl, variant_idx=v))
 
+        embs = [e for e in embs if torch.isfinite(e).all()]
+        if len(embs) == 0:
+            continue  # skip this identity instead of poisoning the gallery
+
         E = torch.stack(embs, dim=0).mean(dim=0)
         E = F.normalize(E, dim=0)
 
@@ -448,7 +559,7 @@ def eval_one_trial(
     for p in tqdm(known_probe_paths, desc=f"[{method_cfg['name']}] Known probes (clean)"):
         pil = Image.open(p).convert("RGB")
         if purifier_probe is not None:
-            pil = purifier_probe([pil])[0]
+            pil = purify_one(purifier_probe, pil, variant_idx=0)
         e = encode_pil(fr, pil)  # (D,)
         sim_vec = (e[None, :] @ gallery.t()).squeeze(0)
         known_max.append(float(sim_vec.max().item()))
@@ -470,7 +581,7 @@ def eval_one_trial(
                 continue
             pil = Image.open(p).convert("RGB")
             if purifier_probe is not None:
-                pil = purifier_probe([pil])[0]
+                pil = purify_one(purifier_probe, pil, variant_idx=0)
             e = encode_pil(fr, pil)
             sim_vec = (e[None, :] @ gallery.t()).squeeze(0)
             scores.append(float(sim_vec.max().item()))
@@ -519,7 +630,7 @@ def eval_one_trial(
 
                 if purifier_probe is not None:
                     adv_pil = tensor_to_pil(x_adv[0])
-                    adv_pil = purifier_probe([adv_pil])[0]
+                    adv_pil = purify_one(purifier_probe, adv_pil, variant_idx=0)
                     e = encode_pil(fr, adv_pil)
                 else:
                     with torch.no_grad():
@@ -560,7 +671,7 @@ def eval_one_trial(
 
                     if purifier_probe is not None:
                         adv_pil = tensor_to_pil(x_adv[0])
-                        adv_pil = purifier_probe([adv_pil])[0]
+                        adv_pil = purify_one(purifier_probe, adv_pil, variant_idx=0)
                         e = encode_pil(fr, adv_pil)
                     else:
                         with torch.no_grad():

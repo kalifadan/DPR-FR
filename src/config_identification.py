@@ -8,7 +8,7 @@ DEVICE = "cuda"
 BATCH_SIZE = 64  # embedding batch size (not diffusion batch size)
 
 # Face encoder wrapper config
-FACE_BACKBONE_NAME = "facenet_inceptionresnetv1_vggface2"
+FACE_BACKBONE_NAME = "facenet_inceptionresnetv1_vggface2"       # TODO: check different encoders
 RETURN_MODE = "embeddings"
 
 BASE_DIR = Path(__file__).resolve().parents[1]  # project root
@@ -24,10 +24,10 @@ PEOPLE_CSV = LFW_META_DIR / "people.csv"
 
 # Optional cache for embeddings
 CACHE_DIR = BASE_DIR / "data" / "cache"
-CACHE_TAG = "lfw_id_enroll_allbutone_v2"
+CACHE_TAG = "lfw_v8"
 
 # Output directory
-OUTPUT_DIR = BASE_DIR / "outputs" / "lfw_id_enroll_allbutone"
+OUTPUT_DIR = BASE_DIR / "outputs" / "lfw_output_final"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ===========================
@@ -36,9 +36,9 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"    # TODO: Check more diffusion models
 
 # Your knobs
-PURIFIER_NUM_STEPS = 4
-PURIFIER_DENOISING_START = 0.25     # TODO: Evaluate multiple numbers
-PURIFIER_NUM_VARIANTS = 1   # internal purifier setting (still supported)
+PURIFIER_NUM_STEPS = 10
+PURIFIER_DENOISING_START = 0.9     # (Diffusion strength is 1 - PURIFIER_DENOISING_START)
+PURIFIER_NUM_VARIANTS = 1
 
 # Practical settings
 PURIFIER_RESOLUTION = 512
@@ -60,7 +60,7 @@ ID_NUM_TRIALS = 1
 
 # Optional speed caps (set None to use all)
 MAX_KNOWN_IDENTITIES = None
-MAX_UNKNOWN_IDENTITIES = None
+MAX_UNKNOWN_IDENTITIES = 1000     # TODO: check None
 
 # Similarity + threshold selection
 SIMILARITY_METRIC = "cosine"   # dot product on L2-normalized embeddings
@@ -83,6 +83,12 @@ ID_METHODS = [
         gallery_mode="clean_only",                 # clean_only
         gallery_diffused_variants_per_image=0,     # ignored for clean_only
         probe_mode="clean",                        # clean or diffused
+    ),
+    dict(
+        name="baseline_probe_diffused",
+        gallery_mode="clean_only",
+        gallery_diffused_variants_per_image=0,
+        probe_mode="diffused",
     ),
     dict(
         name="clean_plus_diffusion",

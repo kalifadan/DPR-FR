@@ -7,7 +7,7 @@ from typing import Dict, Optional, Any
 import torch
 import torch.nn.functional as F
 
-import config
+from old import config
 
 
 @dataclass

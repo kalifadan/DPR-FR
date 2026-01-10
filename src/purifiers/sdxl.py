@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 import torch
@@ -15,8 +15,10 @@ class SDXLPurifier:
 
     Notes:
     - Uses empty prompt and guidance_scale=0 for "unconditional" cleanup-style behavior.
-    - Uses config-style denoising_start; if pipeline doesn't accept it, maps to strength.
-    - Runs in chunks of PURIFIER_BATCH_SIZE to avoid OOM.
+    - Supports config-style denoising_start; if pipeline doesn't accept it, maps to strength.
+    - Runs in chunks of batch_size to avoid OOM.
+    - IMPORTANT: we seed the RNG ONCE and reuse it across calls. Do NOT reseed per image/call,
+      otherwise outputs can become nearly identical when you purify images one-by-one.
     """
 
     model_id: str
@@ -27,18 +29,29 @@ class SDXLPurifier:
     device: Optional[str] = None
     seed: int = 0
 
+    # Internal state (not part of the constructor signature)
+    _gen: torch.Generator = field(init=False, repr=False)
+    _supports_denoising_start: bool = field(init=False, repr=False)
+
     def __post_init__(self):
         if self.device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         if self.device != "cuda":
-            raise RuntimeError("SDXL purifier is intended for CUDA. Set PURIFIER_NAME='none' for CPU runs.")
+            raise RuntimeError(
+                "SDXL purifier is intended for CUDA. Set PURIFIER_NAME='none' for CPU runs."
+            )
+
+        # Create a persistent generator ONCE (critical to avoid identical outputs per call)
+        self._gen = torch.Generator(device=self.device)
+        self._gen.manual_seed(int(self.seed))
 
         # Lazy import so your baseline still runs without diffusers installed
         try:
             from diffusers import StableDiffusionXLImg2ImgPipeline
         except Exception as e:
             raise ImportError(
-                "diffusers is required for SDXL purification. Install: pip install diffusers transformers accelerate safetensors"
+                "diffusers is required for SDXL purification. Install: "
+                "pip install diffusers transformers accelerate safetensors"
             ) from e
 
         self.pipe = StableDiffusionXLImg2ImgPipeline.from_pretrained(
@@ -50,15 +63,28 @@ class SDXLPurifier:
         # Speed/memory knobs (safe defaults)
         self.pipe.enable_attention_slicing()
         # self.pipe.enable_xformers_memory_efficient_attention()  # optional if you have xformers
+        try:
+            self.pipe.set_progress_bar_config(disable=True)
+        except Exception:
+            pass
 
         self.pipe = self.pipe.to(self.device)
 
         # Some pipelines add watermarking; you can disable if present
-        if hasattr(self.pipe, "watermark") and self.pipe.watermark is not None:
+        if hasattr(self.pipe, "watermark") and getattr(self.pipe, "watermark") is not None:
             try:
                 self.pipe.watermark = None
             except Exception:
                 pass
+
+        # Cache whether denoising_start is supported by this diffusers version/pipeline
+        try:
+            from inspect import signature as py_signature
+
+            call_sig = py_signature(self.pipe.__call__)
+            self._supports_denoising_start = "denoising_start" in call_sig.parameters
+        except Exception:
+            self._supports_denoising_start = False
 
     @property
     def signature(self) -> str:
@@ -77,17 +103,14 @@ class SDXLPurifier:
         if len(images) == 0:
             return images
 
-        from inspect import signature as py_signature
-
         out_images: List[Image.Image] = []
-        gen = torch.Generator(device=self.device).manual_seed(self.seed)
-
-        call_sig = py_signature(self.pipe.__call__)
-        supports_denoising_start = "denoising_start" in call_sig.parameters
 
         # Map denoising_start -> strength if needed.
         # Intuition: later start => less modification => smaller strength.
-        strength = float(max(0.0, min(1.0, 1.0 - self.denoising_start)))
+        strength = float(max(0.0, min(1.0, 1.0 - float(self.denoising_start))))
+
+        # Reuse the persistent generator so each call continues RNG state
+        gen = self._gen
 
         for i in range(0, len(images), self.batch_size):
             chunk = [self._prep(im) for im in images[i : i + self.batch_size]]
@@ -100,7 +123,7 @@ class SDXLPurifier:
                 generator=gen,
             )
 
-            if supports_denoising_start:
+            if self._supports_denoising_start:
                 kwargs["denoising_start"] = float(self.denoising_start)
             else:
                 kwargs["strength"] = strength
