@@ -8,7 +8,7 @@ DEVICE = "cuda"
 BATCH_SIZE = 64  # embedding batch size (not diffusion batch size)
 
 # Face encoder wrapper config
-FACE_BACKBONE_NAME = "facenet_inceptionresnetv1_vggface2"       # TODO: check different encoders
+FACE_BACKBONE_NAME = "facenet_inceptionresnetv1_vggface2"
 RETURN_MODE = "embeddings"
 
 BASE_DIR = Path(__file__).resolve().parents[1]  # project root
@@ -24,7 +24,7 @@ PEOPLE_CSV = LFW_META_DIR / "people.csv"
 
 # Optional cache for embeddings
 CACHE_DIR = BASE_DIR / "data" / "cache"
-CACHE_TAG = "lfw_v8"
+CACHE_TAG = "lfw_v15"
 
 # Output directory
 OUTPUT_DIR = BASE_DIR / "outputs" / "lfw_output_final"
@@ -33,11 +33,11 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # ===========================
 # Purifier (SDXL) settings
 # ===========================
-PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"    # TODO: Check more diffusion models
+PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 
 # Your knobs
 PURIFIER_NUM_STEPS = 10
-PURIFIER_DENOISING_START = 0.9     # (Diffusion strength is 1 - PURIFIER_DENOISING_START)
+PURIFIER_DENOISING_START = 0.85     # (Diffusion strength is 1 - PURIFIER_DENOISING_START)
 PURIFIER_NUM_VARIANTS = 1
 
 # Practical settings
@@ -60,7 +60,7 @@ ID_NUM_TRIALS = 1
 
 # Optional speed caps (set None to use all)
 MAX_KNOWN_IDENTITIES = None
-MAX_UNKNOWN_IDENTITIES = 1000     # TODO: check None
+MAX_UNKNOWN_IDENTITIES = None
 
 # Similarity + threshold selection
 SIMILARITY_METRIC = "cosine"   # dot product on L2-normalized embeddings

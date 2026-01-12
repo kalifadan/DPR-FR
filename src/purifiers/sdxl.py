@@ -70,7 +70,16 @@ class SDXLPurifier:
 
         self.pipe = self.pipe.to(self.device)
 
-        # Some pipelines add watermarking; you can disable if present
+        try:
+            if hasattr(self.pipe, "vae") and self.pipe.vae is not None:
+                # decode in fp32
+                self.pipe.vae.to(dtype=torch.float32)
+                # some diffusers versions use this flag
+                if hasattr(self.pipe.vae, "config") and hasattr(self.pipe.vae.config, "force_upcast"):
+                    self.pipe.vae.config.force_upcast = True
+        except Exception:
+            pass
+
         if hasattr(self.pipe, "watermark") and getattr(self.pipe, "watermark") is not None:
             try:
                 self.pipe.watermark = None
@@ -123,15 +132,28 @@ class SDXLPurifier:
                 generator=gen,
             )
 
-            if self._supports_denoising_start:
-                kwargs["denoising_start"] = float(self.denoising_start)
-            else:
-                kwargs["strength"] = strength
+            strength = float(max(0.0, min(0.95, 1.0 - float(self.denoising_start))))
+            kwargs["strength"] = strength
 
-            with torch.autocast(device_type="cuda", dtype=torch.float16):
+            with torch.inference_mode():
                 res = self.pipe(**kwargs)
 
             # diffusers returns images as res.images
             out_images.extend(res.images)
+
+        # Debug: detect collapse to constant images early
+        try:
+            if len(out_images) >= 2:
+                import numpy as np
+                a = np.asarray(out_images[0], dtype=np.int16)
+                b = np.asarray(out_images[1], dtype=np.int16)
+                mad = float(np.mean(np.abs(a - b)))
+                if mad < 1e-3:
+                    raise RuntimeError(
+                        f"SDXL purifier collapse: outputs identical across inputs (MAD={mad:.6f}). "
+                        f"Check VAE upcast + strength usage."
+                    )
+        except Exception:
+            raise
 
         return out_images

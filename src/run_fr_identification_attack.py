@@ -403,6 +403,7 @@ def get_sdxl_purifier():
         denoising_start=float(getattr(config, "PURIFIER_DENOISING_START", 0.25)),
         num_variants=int(getattr(config, "PURIFIER_NUM_VARIANTS", 1)),
         device=str(getattr(config, "DEVICE", "cuda")),
+        seed=int(getattr(config, "SEED", 0)),
     )
 
 
