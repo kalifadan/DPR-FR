@@ -24,7 +24,7 @@ PEOPLE_CSV = LFW_META_DIR / "people.csv"
 
 # Optional cache for embeddings
 CACHE_DIR = BASE_DIR / "data" / "cache"
-CACHE_TAG = "lfw_v15"
+CACHE_TAG = "lfw_v18"
 
 # Output directory
 OUTPUT_DIR = BASE_DIR / "outputs" / "lfw_output_final"
@@ -36,7 +36,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 
 # Your knobs
-PURIFIER_NUM_STEPS = 10
+PURIFIER_NUM_STEPS = 5         # TODO: 10
 PURIFIER_DENOISING_START = 0.85     # (Diffusion strength is 1 - PURIFIER_DENOISING_START)
 PURIFIER_NUM_VARIANTS = 1
 
@@ -108,7 +108,7 @@ ID_METHODS = [
 # Attacks (PGD) — run at test time in addition to clean evaluation
 # ===========================
 RUN_ATTACK_EVAL = True
-ATTACK_EPS_LIST = [0.005, 0.01, 0.03]  # in [-1,1] space
+ATTACK_EPS_LIST = [0.005, 0.01, 0.02]  # in [-1,1] space
 ATTACK_ALPHA = 0.007
 ATTACK_STEPS = 10
 
