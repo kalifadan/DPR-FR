@@ -60,9 +60,15 @@ class SDXLPurifier:
             variant="fp16",
         )
 
-        # Speed/memory knobs (safe defaults)
-        self.pipe.enable_attention_slicing()
-        # self.pipe.enable_xformers_memory_efficient_attention()  # optional if you have xformers
+        try:
+            self.pipe.vae.enable_slicing()
+        except Exception:
+            pass
+        try:
+            self.pipe.vae.enable_tiling()
+        except Exception:
+            pass
+
         try:
             self.pipe.set_progress_bar_config(disable=True)
         except Exception:

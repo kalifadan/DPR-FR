@@ -407,6 +407,27 @@ def get_sdxl_purifier():
     )
 
 
+def get_active_purifier():
+    if getattr(config, "PURIFIER_NAME", "sdxl") == "jpeg":
+        return get_purifier(
+            name="jpeg",
+            model_id=str(getattr(config, "PURIFIER_MODEL_ID")),
+            quality=getattr(config, "JPEG_QUALITY", 50),
+            subsampling=getattr(config, "JPEG_SUBSAMPLING", 2),
+            optimize=getattr(config, "JPEG_OPTIMIZE", True),
+        )
+    else:
+        return get_purifier(
+            name="sdxl",
+            model_id=str(getattr(config, "PURIFIER_MODEL_ID")),
+            num_steps=int(getattr(config, "PURIFIER_NUM_STEPS", 10)),
+            denoising_start=float(getattr(config, "PURIFIER_DENOISING_START", 0.85)),
+            num_variants=int(getattr(config, "PURIFIER_NUM_VARIANTS", 1)),
+            device=str(getattr(config, "DEVICE", "cuda")),
+            seed=int(getattr(config, "SEED", 0)),
+        )
+
+
 def eval_one_trial(
     fr: FacialRecognitionWrapper,
     df_people: pd.DataFrame,
@@ -437,7 +458,7 @@ def eval_one_trial(
     k_diff = int(method_cfg.get("gallery_diffused_variants_per_image", 0))
 
     # Purifier + caches
-    purifier_sdxl = get_sdxl_purifier()
+    purifier_sdxl = get_active_purifier()    # get_sdxl_purifier()
 
     # --- Sanity check: purifier must depend on input ---
     try:

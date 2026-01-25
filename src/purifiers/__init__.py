@@ -30,7 +30,7 @@ class NoOpPurifier(BasePurifier):
 
 
 def get_purifier(name: str, model_id: str, num_steps: int = 4, denoising_start: float = 0.6, num_variants: int = 1,
-                 device: str = "cuda", seed: int = 0):
+                 device: str = "cuda", seed: int = 0, quality=75, subsampling=2, optimize=True):
     name = (name or "none").lower()
     if name in {"none", "noop"}:
         return NoOpPurifier()
@@ -45,6 +45,14 @@ def get_purifier(name: str, model_id: str, num_steps: int = 4, denoising_start: 
             batch_size=1,
             device=device,
             seed=int(seed),
+        )
+
+    if name == "jpeg":
+        from .jpeg import JPEGPurifier
+        return JPEGPurifier(
+            quality=quality,
+            subsampling=subsampling,
+            optimize=optimize,
         )
 
     raise ValueError(f"Unknown PURIFIER_NAME={name}. Supported: 'none', 'sdxl'.")

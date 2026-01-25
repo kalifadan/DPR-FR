@@ -24,7 +24,7 @@ PEOPLE_CSV = LFW_META_DIR / "people.csv"
 
 # Optional cache for embeddings
 CACHE_DIR = BASE_DIR / "data" / "cache"
-CACHE_TAG = "lfw_v18"
+CACHE_TAG = "lfw_v24"
 
 # Output directory
 OUTPUT_DIR = BASE_DIR / "outputs" / "lfw_output_final"
@@ -36,9 +36,16 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 
 # Your knobs
-PURIFIER_NUM_STEPS = 5         # TODO: 10
+PURIFIER_NUM_STEPS = 15         # TODO: 10
 PURIFIER_DENOISING_START = 0.85     # (Diffusion strength is 1 - PURIFIER_DENOISING_START)
 PURIFIER_NUM_VARIANTS = 1
+
+
+PURIFIER_NAME = "jpeg"
+JPEG_QUALITY = 50          # try 30/50/70
+JPEG_SUBSAMPLING = 2       # 2 is common
+JPEG_OPTIMIZE = True
+
 
 # Practical settings
 PURIFIER_RESOLUTION = 512
@@ -78,30 +85,30 @@ EVAL_UNKNOWN_SINGLETONS = True
 # - "clean_plus_diffusion": enrollment uses clean + 1 diffused per enrollment image (n+n); probe diffused
 # - "diffusion": enrollment uses diffused-only per enrollment image; probe diffused
 ID_METHODS = [
-    dict(
-        name="baseline",
-        gallery_mode="clean_only",                 # clean_only
-        gallery_diffused_variants_per_image=0,     # ignored for clean_only
-        probe_mode="clean",                        # clean or diffused
-    ),
+    # dict(
+    #     name="baseline",
+    #     gallery_mode="clean_only",                 # clean_only
+    #     gallery_diffused_variants_per_image=0,     # ignored for clean_only
+    #     probe_mode="clean",                        # clean or diffused
+    # ),
     dict(
         name="baseline_probe_diffused",
         gallery_mode="clean_only",
         gallery_diffused_variants_per_image=0,
         probe_mode="diffused",
     ),
-    dict(
-        name="clean_plus_diffusion",
-        gallery_mode="clean_plus_diffused",        # clean_plus_diffused => clean + K diffused per enroll image
-        gallery_diffused_variants_per_image=1,     # K=1 gives n+n
-        probe_mode="diffused",
-    ),
-    dict(
-        name="diffusion",
-        gallery_mode="diffused_only",              # diffuse each enroll image (K variants per image; usually 1)
-        gallery_diffused_variants_per_image=1,
-        probe_mode="diffused",
-    ),
+    # dict(
+    #     name="clean_plus_diffusion",
+    #     gallery_mode="clean_plus_diffused",        # clean_plus_diffused => clean + K diffused per enroll image
+    #     gallery_diffused_variants_per_image=1,     # K=1 gives n+n
+    #     probe_mode="diffused",
+    # ),
+    # dict(
+    #     name="diffusion",
+    #     gallery_mode="diffused_only",              # diffuse each enroll image (K variants per image; usually 1)
+    #     gallery_diffused_variants_per_image=1,
+    #     probe_mode="diffused",
+    # ),
 ]
 
 # ===========================
