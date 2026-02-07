@@ -24,7 +24,7 @@ PEOPLE_CSV = LFW_META_DIR / "people.csv"
 
 # Optional cache for embeddings
 CACHE_DIR = BASE_DIR / "data" / "cache"
-CACHE_TAG = "lfw_v24"
+CACHE_TAG = "lfw_v25"
 
 # Output directory
 OUTPUT_DIR = BASE_DIR / "outputs" / "lfw_output_final"
@@ -36,15 +36,21 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 
 # Your knobs
-PURIFIER_NUM_STEPS = 15         # TODO: 10
-PURIFIER_DENOISING_START = 0.85     # (Diffusion strength is 1 - PURIFIER_DENOISING_START)
-PURIFIER_NUM_VARIANTS = 1
+# PURIFIER_NUM_STEPS = 15         # TODO: 10
+# PURIFIER_DENOISING_START = 0.85     # (Diffusion strength is 1 - PURIFIER_DENOISING_START)
+# PURIFIER_NUM_VARIANTS = 1
 
 
-PURIFIER_NAME = "jpeg"
-JPEG_QUALITY = 50          # try 30/50/70
-JPEG_SUBSAMPLING = 2       # 2 is common
-JPEG_OPTIMIZE = True
+# PURIFIER_NAME = "jpeg"
+# JPEG_QUALITY = 50          # try 30/50/70
+# JPEG_SUBSAMPLING = 2       # 2 is common
+# JPEG_OPTIMIZE = True
+
+
+PURIFIER_NAME = "smooth"
+SMOOTH_KIND = "gaussian"       # hard coded
+SMOOTH_RADIUS = 1.0           # hard coded
+SMOOTH_MEDIAN_SIZE = 3      # hard coded
 
 
 # Practical settings

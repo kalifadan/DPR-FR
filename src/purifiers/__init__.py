@@ -55,4 +55,12 @@ def get_purifier(name: str, model_id: str, num_steps: int = 4, denoising_start: 
             optimize=optimize,
         )
 
+    if name == "smooth":
+        from .smooth import SmoothPurifier
+        return SmoothPurifier(
+            kind="gaussian",
+            radius=1.0,
+            median_size=3,
+        )
+
     raise ValueError(f"Unknown PURIFIER_NAME={name}. Supported: 'none', 'sdxl'.")
