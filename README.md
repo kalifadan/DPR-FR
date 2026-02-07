@@ -22,8 +22,3 @@ To run the FR algorithm:
 ``
 python3 src/src/run_fr_identification_attack.py
 ``
-
-## TODO:
-1) Hyperparams (sweep) over the diffusion params
-2) Cleaned + origianl photos comparison
-3) Add attack
