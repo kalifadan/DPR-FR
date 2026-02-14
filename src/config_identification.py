@@ -24,7 +24,7 @@ PEOPLE_CSV = LFW_META_DIR / "people.csv"
 
 # Optional cache for embeddings
 CACHE_DIR = BASE_DIR / "data" / "cache"
-CACHE_TAG = "lfw_v28"
+CACHE_TAG = "lfw_v29"
 
 # Output directory
 OUTPUT_DIR = BASE_DIR / "outputs" / "lfw_output_final"
@@ -72,8 +72,8 @@ MAX_ENROLL_PER_ID = None       # set e.g. 5 to cap compute; None = use all remai
 ID_NUM_TRIALS = 1
 
 # Optional speed caps (set None to use all)
-MAX_KNOWN_IDENTITIES = 10   # TODO: None
-MAX_UNKNOWN_IDENTITIES = 10     # TODO: None
+MAX_KNOWN_IDENTITIES = None
+MAX_UNKNOWN_IDENTITIES = None
 
 # Similarity + threshold selection
 SIMILARITY_METRIC = "cosine"   # dot product on L2-normalized embeddings
@@ -122,7 +122,7 @@ ID_METHODS = [
 # Attacks
 # ===========================
 RUN_ATTACK_EVAL = True
-ATTACK_NAME = "fgsm"      # "pgd" or "fgsm"
+ATTACK_NAME = "pgd"      # "pgd" or "fgsm"
 
 ATTACK_EPS_LIST = [0.005, 0.01, 0.02]  # in [-1,1] space
 
@@ -143,4 +143,4 @@ EXAMPLE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 SAVE_EXAMPLE_IMAGES = True
 SAVE_EXAMPLE_MAX = 10          # total per method (keep small)
 SAVE_EXAMPLE_WHICH = "known"   # "known", "unknown", or "both"
-SAVE_EXAMPLE_EPS = 0.01        # only save for this eps (avoid too many files)
+SAVE_EXAMPLE_EPS = 0.02        # only save for this eps (avoid too many files)
