@@ -111,6 +111,16 @@ def _ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
 
+def _safe_name(s: str) -> str:
+    return "".join([c if (c.isalnum() or c in ("-", "_")) else "_" for c in str(s)])
+
+def _save_example(out_dir: Path, subdir: str, stem: str, pil: Image.Image) -> None:
+    d = out_dir / "examples" / subdir
+    _ensure_dir(d)
+    fp = d / f"{stem}.png"
+    pil.save(fp)
+
+
 # ---------------------------
 # Embedding cache (image-level) — purifier-aware, variant-aware
 # ---------------------------
@@ -322,6 +332,69 @@ def pick_threshold_max_open_set_acc(
             best_tau = float(tau)
 
     return best_tau
+
+
+
+# ---------------------------
+# FGSM attacks (single-step sign gradient)
+# ---------------------------
+def fgsm_attack_known_probe(
+    fr: FacialRecognitionWrapper,
+    x: torch.Tensor,                 # (1,3,H,W) in [-1,1]
+    gallery: torch.Tensor,           # (N,D) normalized, on device
+    true_idx: int,
+    eps: float,
+) -> torch.Tensor:
+    """
+    Misidentify: minimize margin = sim_true - max_sim_other using one step.
+    """
+    x0 = x.detach()
+    adv = x.detach().clone().to(fr.device_str)
+
+    adv.requires_grad_(True)
+    e = fr.encode_tensor(adv)
+    e = F.normalize(e, dim=1)
+    sims = e @ gallery.t()
+
+    sim_true = sims[0, true_idx]
+    sims_other = sims.clone()
+    sims_other[0, true_idx] = -1e9
+    sim_best_other = sims_other.max(dim=1).values[0]
+    margin = sim_true - sim_best_other
+
+    grad = torch.autograd.grad(margin, adv, retain_graph=False, create_graph=False)[0]
+
+    adv = adv.detach() - eps * grad.sign()
+    adv = torch.max(torch.min(adv, x0 + eps), x0 - eps)
+    adv = torch.clamp(adv, -1.0, 1.0)
+    return adv.detach()
+
+
+def fgsm_attack_unknown_probe(
+    fr: FacialRecognitionWrapper,
+    x: torch.Tensor,                 # (1,3,H,W) in [-1,1]
+    gallery: torch.Tensor,           # (N,D) normalized, on device
+    eps: float,
+) -> torch.Tensor:
+    """
+    Impersonate: maximize max similarity to any gallery identity using one step.
+    """
+    x0 = x.detach()
+    adv = x.detach().clone().to(fr.device_str)
+
+    adv.requires_grad_(True)
+    e = fr.encode_tensor(adv)
+    e = F.normalize(e, dim=1)
+    sims = e @ gallery.t()
+    max_sim = sims.max(dim=1).values[0]
+    loss = -max_sim  # gradient step that increases max_sim
+
+    grad = torch.autograd.grad(loss, adv, retain_graph=False, create_graph=False)[0]
+
+    adv = adv.detach() - eps * grad.sign()
+    adv = torch.max(torch.min(adv, x0 + eps), x0 - eps)
+    adv = torch.clamp(adv, -1.0, 1.0)
+    return adv.detach()
 
 
 # ---------------------------
@@ -578,10 +651,35 @@ def eval_one_trial(
     known_max, known_argmax = [], []
     purifier_probe = purifier_sdxl if probe_needs_diff else None
 
+    # --- config flags ---
+    save_examples = bool(getattr(config, "SAVE_EXAMPLE_IMAGES", False))
+    save_max = int(getattr(config, "SAVE_EXAMPLE_MAX", 0))
+    save_which = str(getattr(config, "SAVE_EXAMPLE_WHICH", "known")).lower()
+
+    # IMPORTANT: keep a separate counter for "examples saved"
+    saved_examples = 0
+    out_dir = Path(getattr(config, "EXAMPLE_OUTPUT_DIR", config.OUTPUT_DIR))
+
     for p in tqdm(known_probe_paths, desc=f"[{method_cfg['name']}] Known probes (clean)"):
         pil = Image.open(p).convert("RGB")
+
+        do_save_this = (
+                save_examples and save_max > 0 and save_which in ("known", "both")
+                and saved_examples < save_max
+        )
+        if do_save_this:
+            stem = f"known_{saved_examples:03d}_{_safe_name(p.parent.name)}_{p.stem}"
+            _save_example(out_dir, f"{_safe_name(method_cfg['name'])}/regular", stem, pil)
+
         if purifier_probe is not None:
-            pil = purify_one(purifier_probe, pil, variant_idx=0)
+            pil_def = purify_one(purifier_probe, pil, variant_idx=0)
+            if do_save_this:
+                _save_example(out_dir, f"{_safe_name(method_cfg['name'])}/after_diffusion/clean", stem, pil_def)
+            pil = pil_def
+
+        if do_save_this:
+            saved_examples += 1
+
         e = encode_pil(fr, pil)  # (D,)
         sim_vec = (e[None, :] @ gallery.t()).squeeze(0)
         known_max.append(float(sim_vec.max().item()))
@@ -626,29 +724,61 @@ def eval_one_trial(
     # Attack evals
     attack_out = {}
     if getattr(config, "RUN_ATTACK_EVAL", False) and len(getattr(config, "ATTACK_EPS_LIST", [])) > 0:
+
+        attack_name = str(getattr(config, "ATTACK_NAME", "pgd")).lower()
         gallery_dev = F.normalize(gallery.to(fr.device_str), dim=1)
 
-        # known probes PGD
+        save_eps = float(getattr(config, "SAVE_EXAMPLE_EPS", -1))  # save only one eps to avoid flooding
+        saved_attack_examples = 0  # separate counter for attack examples
+
         for eps in list(getattr(config, "ATTACK_EPS_LIST", [])):
             eps = float(eps)
 
-            # Known probes: misidentify
+            # Known probes
             correct_k = 0
             known_scores_adv = []
-
-            for p, t in tqdm(list(zip(known_probe_paths, known_true_arr.tolist())), desc=f"[{method_cfg['name']}] PGD known eps={eps}"):
+            for p, t in tqdm(list(zip(known_probe_paths, known_true_arr.tolist())),
+                             desc=f"[{method_cfg['name']}] {attack_name.upper()} known eps={eps}"):
                 pil = Image.open(p).convert("RGB")
                 x = fr.preprocess_pil([pil]).to(fr.device_str)
 
-                x_adv = pgd_attack_known_probe(
-                    fr=fr,
-                    x=x,
-                    gallery=gallery_dev,
-                    true_idx=int(t),
-                    eps=eps,
-                    alpha=float(config.ATTACK_ALPHA),
-                    steps=int(config.ATTACK_STEPS),
+                if attack_name == "pgd":
+                    x_adv = pgd_attack_known_probe(
+                        fr=fr, x=x, gallery=gallery_dev, true_idx=int(t),
+                        eps=eps, alpha=float(config.ATTACK_ALPHA), steps=int(config.ATTACK_STEPS),
+                    )
+                elif attack_name == "fgsm":
+                    x_adv = fgsm_attack_known_probe(
+                        fr=fr, x=x, gallery=gallery_dev, true_idx=int(t), eps=eps
+                    )
+                else:
+                    raise ValueError(f"Unknown ATTACK_NAME={attack_name}")
+
+                do_save_attack = (
+                        save_examples and save_max > 0 and save_which in ("known", "both")
+                        and (save_eps < 0 or abs(eps - save_eps) < 1e-12)
+                        and saved_attack_examples < save_max
                 )
+
+                if do_save_attack:
+                    stem = f"known_attack_{saved_attack_examples:03d}_{_safe_name(p.parent.name)}_{p.stem}"
+
+                    # 1) regular (clean)
+                    _save_example(out_dir, f"{_safe_name(method_cfg['name'])}/regular", stem, pil)
+
+                    # 2) attack (before diffusion)
+                    adv_pil_raw = tensor_to_pil(x_adv[0])
+                    _save_example(out_dir, f"{_safe_name(method_cfg['name'])}/attack/{attack_name}_eps{eps}", stem,
+                                  adv_pil_raw)
+
+                    # 3) after diffusion (attack -> diffusion)
+                    if purifier_probe is not None:
+                        adv_pil_def = purify_one(purifier_probe, adv_pil_raw, variant_idx=0)
+                        _save_example(out_dir,
+                                      f"{_safe_name(method_cfg['name'])}/after_diffusion/{attack_name}_eps{eps}", stem,
+                                      adv_pil_def)
+
+                    saved_attack_examples += 1
 
                 if purifier_probe is not None:
                     adv_pil = tensor_to_pil(x_adv[0])
@@ -675,21 +805,19 @@ def eval_one_trial(
                 correct_u = 0
                 scores_u = []
                 n_eval = 0
-                for name in tqdm(unknown_names, desc=f"[{method_cfg['name']}] PGD unknown eps={eps}"):
+                for name in tqdm(unknown_names, desc=f"[{method_cfg['name']}] {attack_name.upper()} unknown eps={eps}"):
                     p = lfw_image_path(Path(config.LFW_IMAGES_ROOT), name, 1)
                     if not p.exists():
                         continue
                     pil = Image.open(p).convert("RGB")
                     x = fr.preprocess_pil([pil]).to(fr.device_str)
 
-                    x_adv = pgd_attack_unknown_probe(
-                        fr=fr,
-                        x=x,
-                        gallery=gallery_dev,
-                        eps=eps,
-                        alpha=float(config.ATTACK_ALPHA),
-                        steps=int(config.ATTACK_STEPS),
-                    )
+                    if attack_name == "pgd":
+                        x_adv = pgd_attack_unknown_probe(fr=fr, x=x, gallery=gallery_dev,
+                                                         eps=eps, alpha=float(config.ATTACK_ALPHA),
+                                                         steps=int(config.ATTACK_STEPS))
+                    elif attack_name == "fgsm":
+                        x_adv = fgsm_attack_unknown_probe(fr=fr, x=x, gallery=gallery_dev, eps=eps)
 
                     if purifier_probe is not None:
                         adv_pil = tensor_to_pil(x_adv[0])
@@ -755,6 +883,8 @@ def main() -> None:
 
     df_people = load_people_counts(Path(config.PEOPLE_CSV))
 
+    attack_name = str(getattr(config, "ATTACK_NAME", "pgd")).lower()
+
     rows = []
     for method in list(getattr(config, "ID_METHODS", [])):
         trial_outs = []
@@ -776,8 +906,8 @@ def main() -> None:
             k = f"eps_{float(eps)}"
             for metric in ["known_open_acc", "unknown_reject_acc", "auc_known_vs_unknown"]:
                 xs = np.array([o["attacks"].get(k, {}).get(metric, np.nan) for o in trial_outs], dtype=np.float64)
-                row[f"{metric}_pgd_eps{eps}_mean"] = float(np.nanmean(xs))
-                row[f"{metric}_pgd_eps{eps}_std"] = float(np.nanstd(xs))
+                row[f"{metric}_{attack_name}_eps{eps}_mean"] = float(np.nanmean(xs))
+                row[f"{metric}_{attack_name}_eps{eps}_std"] = float(np.nanstd(xs))
 
         rows.append(row)
 
@@ -786,15 +916,15 @@ def main() -> None:
     # Table 1: known probes
     known_cols = ["method", "tau_mean", "tau_std", "known_closed_acc_mean", "known_closed_acc_std", "known_open_acc_mean", "known_open_acc_std"]
     for eps in list(getattr(config, "ATTACK_EPS_LIST", [])):
-        known_cols += [f"known_open_acc_pgd_eps{eps}_mean", f"known_open_acc_pgd_eps{eps}_std"]
+        known_cols += [f"known_open_acc_{attack_name}_eps{eps}_mean", f"known_open_acc_{attack_name}_eps{eps}_std"]
     table_known = df[known_cols].copy()
 
     # Table 2: unknown singletons
     unk_cols = ["method", "tau_mean", "tau_std", "unknown_reject_acc_mean", "unknown_reject_acc_std", "auc_known_vs_unknown_mean", "auc_known_vs_unknown_std"]
     for eps in list(getattr(config, "ATTACK_EPS_LIST", [])):
         unk_cols += [
-            f"unknown_reject_acc_pgd_eps{eps}_mean", f"unknown_reject_acc_pgd_eps{eps}_std",
-            f"auc_known_vs_unknown_pgd_eps{eps}_mean", f"auc_known_vs_unknown_pgd_eps{eps}_std",
+            f"unknown_reject_acc_{attack_name}_eps{eps}_mean", f"unknown_reject_acc_{attack_name}_eps{eps}_std",
+            f"auc_known_vs_unknown_{attack_name}_eps{eps}_mean", f"auc_known_vs_unknown_{attack_name}_eps{eps}_std",
         ]
     table_unk = df[unk_cols].copy()
 

@@ -24,7 +24,7 @@ PEOPLE_CSV = LFW_META_DIR / "people.csv"
 
 # Optional cache for embeddings
 CACHE_DIR = BASE_DIR / "data" / "cache"
-CACHE_TAG = "lfw_v25"
+CACHE_TAG = "lfw_v28"
 
 # Output directory
 OUTPUT_DIR = BASE_DIR / "outputs" / "lfw_output_final"
@@ -36,9 +36,9 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 
 # Your knobs
-# PURIFIER_NUM_STEPS = 15         # TODO: 10
-# PURIFIER_DENOISING_START = 0.85     # (Diffusion strength is 1 - PURIFIER_DENOISING_START)
-# PURIFIER_NUM_VARIANTS = 1
+PURIFIER_NUM_STEPS = 10
+PURIFIER_DENOISING_START = 0.85     # (Diffusion strength is 1 - PURIFIER_DENOISING_START)
+PURIFIER_NUM_VARIANTS = 1
 
 
 # PURIFIER_NAME = "jpeg"
@@ -47,10 +47,10 @@ PURIFIER_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 # JPEG_OPTIMIZE = True
 
 
-PURIFIER_NAME = "smooth"
-SMOOTH_KIND = "gaussian"       # hard coded
-SMOOTH_RADIUS = 1.0           # hard coded
-SMOOTH_MEDIAN_SIZE = 3      # hard coded
+# PURIFIER_NAME = "smooth"
+# SMOOTH_KIND = "gaussian"       # hard coded
+# SMOOTH_RADIUS = 1.0           # hard coded
+# SMOOTH_MEDIAN_SIZE = 3      # hard coded
 
 
 # Practical settings
@@ -72,8 +72,8 @@ MAX_ENROLL_PER_ID = None       # set e.g. 5 to cap compute; None = use all remai
 ID_NUM_TRIALS = 1
 
 # Optional speed caps (set None to use all)
-MAX_KNOWN_IDENTITIES = None
-MAX_UNKNOWN_IDENTITIES = None
+MAX_KNOWN_IDENTITIES = 10   # TODO: None
+MAX_UNKNOWN_IDENTITIES = 10     # TODO: None
 
 # Similarity + threshold selection
 SIMILARITY_METRIC = "cosine"   # dot product on L2-normalized embeddings
@@ -91,37 +91,42 @@ EVAL_UNKNOWN_SINGLETONS = True
 # - "clean_plus_diffusion": enrollment uses clean + 1 diffused per enrollment image (n+n); probe diffused
 # - "diffusion": enrollment uses diffused-only per enrollment image; probe diffused
 ID_METHODS = [
-    # dict(
-    #     name="baseline",
-    #     gallery_mode="clean_only",                 # clean_only
-    #     gallery_diffused_variants_per_image=0,     # ignored for clean_only
-    #     probe_mode="clean",                        # clean or diffused
-    # ),
+    dict(
+        name="baseline",
+        gallery_mode="clean_only",                 # clean_only
+        gallery_diffused_variants_per_image=0,     # ignored for clean_only
+        probe_mode="clean",                        # clean or diffused
+    ),
     dict(
         name="baseline_probe_diffused",
         gallery_mode="clean_only",
         gallery_diffused_variants_per_image=0,
         probe_mode="diffused",
     ),
-    # dict(
-    #     name="clean_plus_diffusion",
-    #     gallery_mode="clean_plus_diffused",        # clean_plus_diffused => clean + K diffused per enroll image
-    #     gallery_diffused_variants_per_image=1,     # K=1 gives n+n
-    #     probe_mode="diffused",
-    # ),
-    # dict(
-    #     name="diffusion",
-    #     gallery_mode="diffused_only",              # diffuse each enroll image (K variants per image; usually 1)
-    #     gallery_diffused_variants_per_image=1,
-    #     probe_mode="diffused",
-    # ),
+    dict(
+        name="clean_plus_diffusion",
+        gallery_mode="clean_plus_diffused",        # clean_plus_diffused => clean + K diffused per enroll image
+        gallery_diffused_variants_per_image=1,     # K=1 gives n+n
+        probe_mode="diffused",
+    ),
+    dict(
+        name="diffusion",
+        gallery_mode="diffused_only",              # diffuse each enroll image (K variants per image; usually 1)
+        gallery_diffused_variants_per_image=1,
+        probe_mode="diffused",
+    ),
 ]
 
+
 # ===========================
-# Attacks (PGD) — run at test time in addition to clean evaluation
+# Attacks
 # ===========================
 RUN_ATTACK_EVAL = True
+ATTACK_NAME = "fgsm"      # "pgd" or "fgsm"
+
 ATTACK_EPS_LIST = [0.005, 0.01, 0.02]  # in [-1,1] space
+
+# For PGD only
 ATTACK_ALPHA = 0.007
 ATTACK_STEPS = 10
 
@@ -130,3 +135,12 @@ ATTACK_STEPS = 10
 # - unknown singletons: "impersonate" (increase max_sim so it becomes accepted)
 ATTACK_OBJECTIVE_KNOWN = "misidentify"
 ATTACK_OBJECTIVE_UNKNOWN = "impersonate"
+
+
+# Images examples
+EXAMPLE_OUTPUT_DIR = BASE_DIR / "outputs" / "lfw_output_examples"
+EXAMPLE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+SAVE_EXAMPLE_IMAGES = True
+SAVE_EXAMPLE_MAX = 10          # total per method (keep small)
+SAVE_EXAMPLE_WHICH = "known"   # "known", "unknown", or "both"
+SAVE_EXAMPLE_EPS = 0.01        # only save for this eps (avoid too many files)
